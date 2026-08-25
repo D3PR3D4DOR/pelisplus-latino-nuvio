@@ -1,0 +1,17 @@
+﻿node_modules
+.git
+.env
+*.bak
+backup-*/
+cosmos.html
+xupalace.html
+xupalace_org.html
+hglink_to.html
+embed69.html
+minochinos_com.html
+pelisplushd_bz.html
+voe_sx.html
+proxy-test.js
+dumpEmbed69.js
+dumpServer.js
+server.backup.js

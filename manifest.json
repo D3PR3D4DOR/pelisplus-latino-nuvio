@@ -1,0 +1,56 @@
+{
+  "name": "PelisPlusHD",
+  "version": "1.0.0",
+  "description": "Proveedores para Nuvio.",
+  "scrapers": [
+    {
+      "id": "template-provider",
+      "name": "Template Provider",
+      "description": "A starter template for creating Nuvio providers.",
+      "version": "1.0.0",
+      "author": "Your Name",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/template.js",
+      "enabled": false,
+      "logo": "",
+      "contentLanguage": [
+        "en"
+      ],
+      "formats": [
+        "mp4",
+        "mkv"
+      ],
+      "limited": false,
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "pelisplushd",
+      "name": "PelisPlusHD",
+      "description": "Películas y series desde PelisPlusHD.",
+      "version": "1.0.0",
+      "author": "Agustín",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/pelisplushd.js",
+      "enabled": true,
+      "logo": "https://pelisplushd.bz/images/logo/favicon.png",
+      "contentLanguage": [
+        "es",
+        "lat"
+      ],
+      "formats": [
+        "hls",
+        "m3u8"
+      ],
+      "limited": false,
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    }
+  ]
+}
