@@ -10,7 +10,7 @@
 import { HEADERS } from "../http.js";
 
 const PROXY_BASE =
-    "http://192.168.124.11:8080";
+    "http://192.168.124.11:8090";
 
 export async function resolveStreamwish2(url) {
 

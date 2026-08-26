@@ -1,6 +1,6 @@
 /**
  * pelisplushd - Built from src/pelisplushd/
- * Generated: 2026-08-25T21:02:50.327Z
+ * Generated: 2026-08-26T00:31:32.260Z
  */
 var __create = Object.create;
 var __defProp = Object.defineProperty;
@@ -559,7 +559,7 @@ function removeDuplicates(streams) {
 }
 
 // src/pelisplushd/resolvers/streamwish2.js
-var PROXY_BASE = "http://192.168.124.11:8080";
+var PROXY_BASE = "http://192.168.124.11:8090";
 function resolveStreamwish2(url) {
   return __async(this, null, function* () {
     console.log(
