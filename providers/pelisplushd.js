@@ -559,7 +559,7 @@ function removeDuplicates(streams) {
 }
 
 // src/pelisplushd/resolvers/streamwish2.js
-var PROXY_BASE = "http://plugin1.duckdns.org:8090";
+var PROXY_BASE = "https://plugin1.duckdns.org";
 function resolveStreamwish2(url) {
   return __async(this, null, function* () {
     console.log(
