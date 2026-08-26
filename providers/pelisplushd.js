@@ -559,7 +559,7 @@ function removeDuplicates(streams) {
 }
 
 // src/pelisplushd/resolvers/streamwish2.js
-var PROXY_BASE = "http://192.168.124.11:8090";
+var PROXY_BASE = "http://144.22.176.198:8090";
 function resolveStreamwish2(url) {
   return __async(this, null, function* () {
     console.log(
