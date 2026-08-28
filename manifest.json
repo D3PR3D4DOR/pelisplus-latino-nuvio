@@ -1,5 +1,5 @@
 {
-  "name": "PelisPlusHD",
+  "name": "Latino-Nuvio",
   "version": "1.0.0",
   "description": "Proveedores para Nuvio.",
   "scrapers": [
@@ -17,7 +17,7 @@
       "enabled": false,
       "logo": "",
       "contentLanguage": [
-        "en"
+        "es"
       ],
       "formats": [
         "mp4",
@@ -32,7 +32,7 @@
       "name": "PelisPlusHD",
       "description": "Películas y series desde PelisPlusHD.",
       "version": "1.0.0",
-      "author": "Agustín",
+      "author": "D3PR3D4D0R",
       "supportedTypes": [
         "movie",
         "tv"
@@ -46,6 +46,31 @@
       ],
       "formats": [
         "hls",
+        "m3u8"
+      ],
+      "limited": false,
+      "disabledPlatforms": [],
+      "supportsExternalPlayer": true
+    },
+    {
+      "id": "latanime",
+      "name": "Latanime",
+      "description": "Películas y series de anime desde Latanime.",
+      "version": "1.0.0",
+      "author": "D3PR3D4D0R",
+      "supportedTypes": [
+        "movie",
+        "tv"
+      ],
+      "filename": "providers/latanime.js",
+      "enabled": true,
+      "logo": "https://latanime.org/img/logito.png",
+      "contentLanguage": [
+        "es",
+        "lat"
+      ],
+      "formats": [
+        "mp4",
         "m3u8"
       ],
       "limited": false,
