@@ -1,0 +1,1542 @@
+﻿import {
+    getMovie,
+    getTv
+} from "./tmdb.js";
+
+import {
+    searchSoloLatino
+} from "./search.js";
+
+import {
+    getEpisodeUrl
+} from "./series.js";
+
+import {
+    getEpisodeServers,
+    resolvePlayerUrl
+} from "./episode.js";
+
+import {
+    resolveEmbed69
+} from "./resolvers/embed69.js";
+
+import {
+    resolveVidhide
+} from "./resolvers/vidhide.js";
+
+import {
+    resolveStreamwish2
+} from "./resolvers/streamwish2.js";
+
+import {
+    resolveVoe
+} from "./resolvers/voe.js";
+
+import {
+    resolveXupalaсe
+} from "./resolvers/xupalace.js";
+
+import {
+    resolvePelisSeriesHoy
+} from "./resolvers/pelisserieshoy.js";
+
+export async function extractStreams(
+    tmdbId,
+    mediaType,
+    season,
+    episode
+) {
+
+    console.log(
+        "[SoloLatino] extractStreams()"
+    );
+
+    console.log(
+        "[SoloLatino] TMDB:",
+        tmdbId
+    );
+
+    console.log(
+        "[SoloLatino] Type:",
+        mediaType
+    );
+
+    console.log(
+        "[SoloLatino] Season:",
+        season
+    );
+
+    console.log(
+        "[SoloLatino] Episode:",
+        episode
+    );
+
+    try {
+
+        // ==================================================
+        // 1. TMDB
+        // ==================================================
+
+        const media =
+            mediaType === "movie"
+                ? await getMovie(
+                    tmdbId
+                )
+                : await getTv(
+                    tmdbId
+                );
+
+        if (
+            !media?.title
+        ) {
+
+            console.log(
+                "[SoloLatino] No se obtuvo información de TMDB"
+            );
+
+            return [];
+        }
+
+        console.log(
+            "[SoloLatino] TMDB:",
+            media.title,
+            media.year
+        );
+
+        // ==================================================
+        // 2. SEARCH
+        // ==================================================
+
+        const results =
+            await searchSoloLatino(
+                media
+            );
+
+        console.log(
+            "[SoloLatino] Total results:",
+            results.length
+        );
+
+        if (
+            results.length === 0
+        ) {
+
+            console.log(
+                "[SoloLatino] No search results"
+            );
+
+            return [];
+        }
+
+        // ==================================================
+        // 3. SELECT CONTENT
+        // ==================================================
+
+        const selected =
+            selectResult(
+                results,
+                media,
+                mediaType
+            );
+
+        if (
+            !selected
+        ) {
+
+            console.log(
+                "[SoloLatino] No se encontró coincidencia"
+            );
+
+            return [];
+        }
+
+        console.log(
+            "[SoloLatino] Selected:",
+            selected.title
+        );
+
+        console.log(
+            "[SoloLatino] URL:",
+            selected.url
+        );
+
+        // ==================================================
+        // 4. EPISODE
+        // ==================================================
+
+        let contentUrl =
+            selected.url;
+
+        if (
+            mediaType === "tv"
+        ) {
+
+            if (
+                !Number.isInteger(
+                    Number(
+                        season
+                    )
+                ) ||
+                !Number.isInteger(
+                    Number(
+                        episode
+                    )
+                )
+            ) {
+
+                console.log(
+                    "[SoloLatino] TV requiere season y episode"
+                );
+
+                return [];
+            }
+
+            contentUrl =
+                await getEpisodeUrl(
+                    selected.url,
+                    Number(
+                        season
+                    ),
+                    Number(
+                        episode
+                    )
+                );
+
+            if (
+                !contentUrl
+            ) {
+
+                console.log(
+                    `[SoloLatino] No se encontró S${season}E${episode}`
+                );
+
+                return [];
+            }
+
+            console.log(
+                "[SoloLatino] Episode:",
+                contentUrl
+            );
+        }
+
+        // ==================================================
+        // 5. SERVERS
+        // ==================================================
+
+        const servers =
+            await getEpisodeServers(
+                contentUrl
+            );
+
+        console.log(
+            "[SoloLatino] Servers:",
+            servers.length
+        );
+
+        if (
+            servers.length === 0
+        ) {
+
+            return [];
+        }
+
+        // ==================================================
+        // 6. RESOLVE SERVERS
+        // ==================================================
+
+        const streams =
+            [];
+
+        const processedPlayers =
+            new Set();
+
+        for (
+            const server of servers
+        ) {
+
+            if (
+                !server?.playerToken
+            ) {
+
+                console.log(
+                    "[SoloLatino] Server sin token:",
+                    server?.label
+                );
+
+                continue;
+            }
+
+            console.log(
+                "[SoloLatino] Processing server:",
+                server.label
+            );
+
+            try {
+
+                // ------------------------------------------------
+                // Obtener URL real del player
+                // ------------------------------------------------
+
+                const player =
+                    await resolvePlayerUrl(
+                        server
+                    );
+
+                if (
+                    !player?.url
+                ) {
+
+                    console.log(
+                        "[SoloLatino] Player sin URL:",
+                        server.label
+                    );
+
+                    continue;
+                }
+
+                console.log(
+                    "[SoloLatino] Player:",
+                    player.url
+                );
+
+                // ------------------------------------------------
+                // Evitar duplicados
+                // ------------------------------------------------
+
+                if (
+                    processedPlayers.has(
+                        player.url
+                    )
+                ) {
+
+                    console.log(
+                        "[SoloLatino] Player duplicado:",
+                        player.url
+                    );
+
+                    continue;
+                }
+
+                processedPlayers.add(
+                    player.url
+                );
+
+                // =================================================
+                // PELISSERIESHOY
+                // =================================================
+
+                if (
+                    isPelisSeriesHoy(
+                        player.url
+                    )
+                ) {
+
+                    console.log(
+                        "[SoloLatino] Resolver: PelisSeriesHoy"
+                    );
+
+                    try {
+
+                        const resolved =
+                            await resolvePelisSeriesHoy(
+                                player.url,
+                                contentUrl
+                            );
+
+                        console.log(
+                            `[PelisSeriesHoy] Streams: ${resolved.length}`
+                        );
+
+                        for (
+                            const stream of resolved
+                        ) {
+
+                            if (
+                                !stream?.url
+                            ) {
+                                continue;
+                            }
+
+                            streams.push({
+                                name:
+                                    stream.name ||
+                                    "SoloLatino PelisSeriesHoy",
+
+                                title:
+                                    media.title,
+
+                                url:
+                                    stream.url,
+
+                                quality:
+                                    stream.quality ||
+                                    "auto",
+
+                                language:
+
+                                    server.language ||
+
+                                        "LAT",
+
+                                headers:
+                                    stream.headers ||
+                                    {}
+                            });
+                        }
+
+                    } catch (
+                        error
+                    ) {
+
+                        console.warn(
+                            "[SoloLatino] PelisSeriesHoy error:",
+                            error.message
+                        );
+                    }
+
+                    continue;
+                }
+                // =================================================
+                // EMBED69
+                // =================================================
+
+                if (
+                    isEmbed69(
+                        player.url
+                    )
+                ) {
+
+                    console.log(
+                        "[SoloLatino] Resolver: Embed69"
+                    );
+
+                    const files =
+                        await resolveEmbed69(
+                            player.url
+                        );
+
+                    console.log(
+                        "[Embed69] Files:",
+                        Array.isArray(
+                            files
+                        )
+                            ? files.length
+                            : 0
+                    );
+
+                    if (
+                        !Array.isArray(
+                            files
+                        )
+                    ) {
+
+                        continue;
+                    }
+
+                    // ---------------------------------------------
+                    // Procesar todos los sortedEmbeds
+                    // ---------------------------------------------
+
+                    for (
+                        const file of files
+                    ) {
+
+                        if (
+                            !Array.isArray(
+                                file?.sortedEmbeds
+                            )
+                        ) {
+
+                            continue;
+                        }
+
+                        const processedEmbeds =
+                            new Set();
+
+                        for (
+                            const embed of
+                            file.sortedEmbeds
+                        ) {
+
+                            if (
+                                !embed?.link
+                            ) {
+
+                                continue;
+                            }
+
+                            const embedUrl =
+                                embed.link;
+
+                            if (
+                                processedEmbeds.has(
+                                    embedUrl
+                                )
+                            ) {
+
+                                continue;
+                            }
+
+                            processedEmbeds.add(
+                                embedUrl
+                            );
+
+                            const serverName =
+                                String(
+                                    embed.servername ||
+                                    ""
+                                )
+                                    .trim()
+                                    .toLowerCase();
+
+                            console.log(
+                                "[SoloLatino] Embed69 server:",
+                                serverName,
+                                "->",
+                                embedUrl
+                            );
+
+                            // ======================================
+                            // VIDHIDE
+                            // ======================================
+
+                            if (
+                                serverName ===
+                                "vidhide"
+                            ) {
+
+                                console.log(
+                                    "[SoloLatino] Resolver Embed69 -> Vidhide"
+                                );
+
+                                try {
+
+                                    const resolved =
+                                        await resolveVidhide(
+                                            embedUrl
+                                        );
+
+                                    if (
+                                        !Array.isArray(
+                                            resolved
+                                        )
+                                    ) {
+
+                                        continue;
+                                    }
+
+                                    for (
+                                        const stream of
+                                        resolved
+                                    ) {
+
+                                        if (
+                                            !stream?.url
+                                        ) {
+
+                                            continue;
+                                        }
+
+                                        streams.push({
+
+                                            name:
+                                                `SoloLatino Vidhide ${stream.quality || "auto"}`,
+
+                                            title:
+                                                media.title,
+
+                                            url:
+                                                stream.url,
+
+                                            quality:
+                                                stream.quality ||
+                                                "auto",
+
+                                            language:
+
+                                                embed.video_language ||
+
+                                                    server.language ||
+
+                                                    "LAT",
+
+                                            headers:
+                                                stream.headers ||
+                                                {}
+                                        });
+                                    }
+
+                                } catch (
+                                    error
+                                ) {
+
+                                    console.warn(
+                                        "[SoloLatino] Embed69 Vidhide error:",
+                                        error.message
+                                    );
+                                }
+
+                                continue;
+                            }
+
+                            // ======================================
+                            // STREAMWISH
+                            // ======================================
+
+                            if (
+                                serverName ===
+                                "streamwish"
+                            ) {
+
+                                console.log(
+                                    "[SoloLatino] Resolver Embed69 -> StreamWish"
+                                );
+
+                                try {
+
+                                    const resolved =
+                                        await resolveStreamwish2(
+                                            embedUrl
+                                        );
+
+                                    if (
+                                        !Array.isArray(
+                                            resolved
+                                        )
+                                    ) {
+
+                                        continue;
+                                    }
+
+                                    for (
+                                        const stream of
+                                        resolved
+                                    ) {
+
+                                        if (
+                                            !stream?.url
+                                        ) {
+
+                                            continue;
+                                        }
+
+                                        streams.push({
+
+                                            name:
+                                                `SoloLatino StreamWish ${stream.quality || "auto"}`,
+
+                                            title:
+                                                media.title,
+
+                                            url:
+                                                stream.url,
+
+                                            quality:
+                                                stream.quality ||
+                                                "auto",
+
+                                            language:
+
+                                                embed.video_language ||
+
+                                                    server.language ||
+
+                                                    "LAT",
+
+                                            headers:
+                                                stream.headers ||
+                                                {}
+                                        });
+                                    }
+
+                                } catch (
+                                    error
+                                ) {
+
+                                    console.warn(
+                                        "[SoloLatino] Embed69 StreamWish error:",
+                                        error.message
+                                    );
+                                }
+
+                                continue;
+                            }
+
+                            // ======================================
+                            // VOE
+                            // ======================================
+
+                            if (
+                                serverName ===
+                                "voe"
+                            ) {
+
+                                console.log(
+                                    "[SoloLatino] Resolver Embed69 -> VOE"
+                                );
+
+                                try {
+
+                                    const resolved =
+                                        await resolveVoe(
+                                            embedUrl
+                                        );
+
+                                    if (
+                                        Array.isArray(
+                                            resolved
+                                        )
+                                    ) {
+
+                                        for (
+                                            const stream of
+                                            resolved
+                                        ) {
+
+                                            if (
+                                                !stream?.url
+                                            ) {
+
+                                                continue;
+                                            }
+
+                                            streams.push({
+
+                                                name:
+                                                    `SoloLatino VOE ${stream.quality || "auto"}`,
+
+                                                title:
+                                                    media.title,
+
+                                                url:
+                                                    stream.url,
+
+                                                quality:
+                                                    stream.quality ||
+                                                    "auto",
+
+                                                language:
+
+                                                    server.language ||
+
+                                                        "LAT",
+
+                                                headers:
+                                                    stream.headers ||
+                                                    {}
+                                            });
+                                        }
+                                    }
+
+                                } catch (
+                                    error
+                                ) {
+
+                                    console.warn(
+                                        "[SoloLatino] Embed69 VOE error:",
+                                        error.message
+                                    );
+                                }
+
+                                continue;
+                            }
+                            // ======================================
+                            // OTROS
+                            // ======================================
+
+                            console.log(
+                                "[SoloLatino] Embed69 server no soportado todavía:",
+                                serverName,
+                                embedUrl
+                            );
+                        }
+                    }
+
+                    continue;
+                }
+
+                // =================================================
+                // XUPALACE
+                // =================================================
+
+                if (
+                    isXupalaсe(
+                        player.url
+                    )
+                ) {
+
+                    console.log(
+                        "[SoloLatino] Resolver: Xupalaсe"
+                    );
+
+                    try {
+
+                        const resolved =
+                            await resolveXupalaсe(
+                                player.url
+                            );
+
+                        if (
+                            !Array.isArray(
+                                resolved
+                            )
+                        ) {
+
+                            continue;
+                        }
+
+                        console.log(
+                            "[Xupalaсe] Streams:",
+                            resolved.length
+                        );
+
+                        for (
+                            const stream of
+                            resolved
+                        ) {
+
+                            if (
+                                !stream?.url
+                            ) {
+
+                                continue;
+                            }
+
+                            streams.push({
+
+                                name:
+                                    stream.name ||
+                                    "SoloLatino Xupalaсe",
+
+                                title:
+                                    media.title,
+
+                                url:
+                                    stream.url,
+
+                                quality:
+                                    stream.quality ||
+                                    "auto",
+
+                                language:
+
+                                    stream.language ||
+
+                                        server.language ||
+
+                                        "LAT",
+
+                                headers:
+                                    stream.headers ||
+                                    {}
+                            });
+                        }
+
+                    } catch (
+                        error
+                    ) {
+
+                        console.warn(
+                            "[SoloLatino] Xupalaсe error:",
+                            error.message
+                        );
+                    }
+
+                    continue;
+                }
+
+                // =================================================
+                // OTROS PLAYERS
+                // =================================================
+
+                console.log(
+                    "[SoloLatino] Player no soportado todavía:",
+                    player.url
+                );
+
+            } catch (
+                error
+            ) {
+
+                console.warn(
+                    `[SoloLatino] Server failed: ${server.label}:`,
+                    error.message
+                );
+            }
+        }
+
+        // ==================================================
+        // 7. DEDUPLICAR
+        // ==================================================
+
+        const unique =
+            deduplicateStreams(
+                streams
+            );
+
+        console.log(
+            "[SoloLatino] Final streams:",
+            unique.length
+        );
+
+        return unique;
+
+    } catch (
+        error
+    ) {
+
+        console.error(
+            "[SoloLatino] ERROR:",
+            error.message
+        );
+
+        return [];
+    }
+}
+
+
+// ==========================================================
+// RESULT SELECTION
+// ==========================================================
+
+function selectResult(
+    results,
+    media,
+    mediaType
+) {
+
+    const wantedTitles = [
+        media.title,
+        media.originalTitle,
+
+        ...(
+            Array.isArray(
+                media.translationTitles
+            )
+                ? media.translationTitles.map(
+                    item =>
+                        typeof item ===
+                            "string"
+                            ? item
+                            : item?.title
+                )
+                : []
+        ),
+
+        ...(
+            Array.isArray(
+                media.alternativeTitles
+            )
+                ? media.alternativeTitles.map(
+                    item =>
+                        typeof item ===
+                            "string"
+                            ? item
+                            : item?.title
+                )
+                : []
+        )
+    ]
+        .filter(
+            Boolean
+        )
+        .map(
+            normalizeTitle
+        )
+        .filter(
+            Boolean
+        );
+
+    const wantedType =
+        mediaType === "movie"
+            ? "pelicula"
+            : "serie";
+
+    // ------------------------------------------------------
+    // TIPO + AÑO
+    // ------------------------------------------------------
+
+    const sameYear =
+        results.filter(
+            result =>
+                result.type ===
+                    wantedType &&
+                (
+                    !media.year ||
+                    result.year ===
+                        media.year
+                )
+        );
+
+    // ------------------------------------------------------
+    // EXACTO
+    // ------------------------------------------------------
+
+    for (
+        const result of
+        sameYear
+    ) {
+
+        const resultTitle =
+            normalizeTitle(
+                cleanTitle(
+                    result.title
+                )
+            );
+
+        for (
+            const wanted of
+            wantedTitles
+        ) {
+
+            if (
+                resultTitle ===
+                wanted
+            ) {
+
+                console.log(
+                    "[SoloLatino] Match exacto:",
+                    result.title
+                );
+
+                return result;
+            }
+        }
+    }
+
+    // ------------------------------------------------------
+    // CONTENIDO
+    // ------------------------------------------------------
+
+    for (
+        const result of
+        sameYear
+    ) {
+
+        const resultTitle =
+            normalizeTitle(
+                cleanTitle(
+                    result.title
+                )
+            );
+
+        for (
+            const wanted of
+            wantedTitles
+        ) {
+
+            if (
+                resultTitle.includes(
+                    wanted
+                ) ||
+                wanted.includes(
+                    resultTitle
+                )
+            ) {
+
+                console.log(
+                    "[SoloLatino] Match por título:",
+                    result.title
+                );
+
+                return result;
+            }
+        }
+    }
+
+    // ------------------------------------------------------
+    // SLUG
+    // ------------------------------------------------------
+
+    for (
+        const result of
+        sameYear
+    ) {
+
+        const slug =
+            getSlug(
+                result.url
+            );
+
+        for (
+            const wanted of
+            wantedTitles
+        ) {
+
+            if (
+                slug === wanted ||
+                slug.includes(
+                    wanted
+                ) ||
+                wanted.includes(
+                    slug
+                )
+            ) {
+
+                console.log(
+                    "[SoloLatino] Match por slug:",
+                    slug
+                );
+
+                return result;
+            }
+        }
+    }
+
+    // ------------------------------------------------------
+    // TOKENS
+    // ------------------------------------------------------
+
+    for (
+        const result of
+        sameYear
+    ) {
+
+        const resultTitle =
+            normalizeTitle(
+                cleanTitle(
+                    result.title
+                )
+            );
+
+        const resultTokens =
+            new Set(
+                resultTitle
+                    .split(
+                        /\s+/
+                    )
+                    .filter(
+                        token =>
+                            token.length >= 2 &&
+                            !STOP_WORDS.has(
+                                token
+                            )
+                    )
+            );
+
+        for (
+            const wanted of
+            wantedTitles
+        ) {
+
+            const wantedTokens =
+                wanted
+                    .split(
+                        /\s+/
+                    )
+                    .filter(
+                        token =>
+                            token.length >= 2 &&
+                            !STOP_WORDS.has(
+                                token
+                            )
+                    );
+
+            if (
+                wantedTokens.length === 0
+            ) {
+
+                continue;
+            }
+
+            let matches =
+                0;
+
+            for (
+                const token of
+                wantedTokens
+            ) {
+
+                if (
+                    resultTokens.has(
+                        token
+                    )
+                ) {
+
+                    matches++;
+                }
+            }
+
+            const ratio =
+                matches /
+                wantedTokens.length;
+
+            if (
+                ratio >= 0.6
+            ) {
+
+                console.log(
+                    "[SoloLatino] Match por tokens:",
+                    result.title
+                );
+
+                return result;
+            }
+        }
+    }
+
+    // ------------------------------------------------------
+    // FALLBACK POR TIPO
+    // ------------------------------------------------------
+
+    const sameType =
+        results.filter(
+            result =>
+                result.type ===
+                wantedType
+        );
+
+    for (
+        const result of
+        sameType
+    ) {
+
+        const resultTitle =
+            normalizeTitle(
+                cleanTitle(
+                    result.title
+                )
+            );
+
+        for (
+            const wanted of
+            wantedTitles
+        ) {
+
+            if (
+                resultTitle ===
+                    wanted ||
+                resultTitle.includes(
+                    wanted
+                ) ||
+                wanted.includes(
+                    resultTitle
+                )
+            ) {
+
+                return result;
+            }
+        }
+    }
+
+    console.log(
+        "[SoloLatino] No matching result"
+    );
+
+    return null;
+}
+
+
+// ==========================================================
+// HELPERS
+// ==========================================================
+
+const STOP_WORDS =
+    new Set([
+        "the",
+        "a",
+        "an",
+        "of",
+        "and",
+        "el",
+        "la",
+        "los",
+        "las",
+        "un",
+        "una",
+        "de",
+        "del",
+        "y"
+    ]);
+
+
+function normalizeTitle(
+    value
+) {
+
+    return String(
+        value || ""
+    )
+        .normalize(
+            "NFD"
+        )
+        .replace(
+            /[\u0300-\u036f]/g,
+            ""
+        )
+        .toLowerCase()
+        .replace(
+            /[^a-z0-9]+/g,
+            " "
+        )
+        .replace(
+            /\s+/g,
+            " "
+        )
+        .trim();
+}
+
+
+function cleanTitle(
+    value
+) {
+
+    return String(
+        value || ""
+    )
+        .replace(
+            /^\s*(pel[ií]cula|serie|anime|dibujos?)\s*★?\s*\d+(?:\.\d+)?\s*/i,
+            ""
+        )
+        .replace(
+            /\b(19|20)\d{2}\b/g,
+            " "
+        )
+        .replace(
+            /\s+/g,
+            " "
+        )
+        .trim();
+}
+
+
+function getSlug(
+    url
+) {
+
+    try {
+
+        const parsed =
+            new URL(
+                url
+            );
+
+        const parts =
+            parsed.pathname
+                .split("/")
+                .filter(
+                    Boolean
+                );
+
+        if (
+            parts.length === 0
+        ) {
+
+            return "";
+        }
+
+        return normalizeTitle(
+            parts[
+                parts.length - 1
+            ]
+        );
+
+    } catch {
+
+        return "";
+    }
+}
+
+
+// ==========================================================
+// FORMATO DE IDIOMA
+// ==========================================================
+
+function formatLanguage(
+    language
+) {
+
+    const value =
+        String(
+            language || ""
+        )
+            .trim()
+            .toLowerCase();
+
+    const languages = {
+
+        "lat": "🇲🇽 Latino",
+        "mx": "🇲🇽 Latino",
+        "es-mx": "🇲🇽 Latino",
+        "latam": "🇲🇽 Latino",
+        "latino": "🇲🇽 Latino",
+
+        "es": "🇪🇸 Español (España)",
+        "es-es": "🇪🇸 Español (España)",
+        "esp": "🇪🇸 Español (España)",
+        "españa": "🇪🇸 Español (España)",
+        "castellano": "🇪🇸 Español (España)",
+
+        "en": "🇺🇸 Inglés",
+        "en-us": "🇺🇸 Inglés",
+        "en-gb": "🇬🇧 Inglés",
+        "eng": "🇺🇸 Inglés",
+        "ingles": "🇺🇸 Inglés",
+        "inglés": "🇺🇸 Inglés",
+
+        "ja": "🇯🇵 Japonés",
+        "ja-jp": "🇯🇵 Japonés",
+        "jpn": "🇯🇵 Japonés",
+        "japones": "🇯🇵 Japonés",
+        "japonés": "🇯🇵 Japonés",
+
+        "pt": "🇧🇷 Portugués",
+        "pt-br": "🇧🇷 Portugués",
+        "por": "🇧🇷 Portugués",
+        "portugues": "🇧🇷 Portugués",
+        "portugués": "🇧🇷 Portugués",
+
+        "fr": "🇫🇷 Francés",
+        "fr-fr": "🇫🇷 Francés",
+        "fra": "🇫🇷 Francés",
+        "frances": "🇫🇷 Francés",
+        "francés": "🇫🇷 Francés",
+
+        "it": "🇮🇹 Italiano",
+        "it-it": "🇮🇹 Italiano",
+        "ita": "🇮🇹 Italiano",
+
+        "de": "🇩🇪 Alemán",
+        "de-de": "🇩🇪 Alemán",
+        "deu": "🇩🇪 Alemán",
+        "aleman": "🇩🇪 Alemán",
+        "alemán": "🇩🇪 Alemán",
+
+        "ko": "🇰🇷 Coreano",
+        "ko-kr": "🇰🇷 Coreano",
+        "kor": "🇰🇷 Coreano",
+
+        "zh": "🇨🇳 Chino",
+        "zh-cn": "🇨🇳 Chino",
+        "zho": "🇨🇳 Chino",
+        "chi": "🇨🇳 Chino",
+
+        "ru": "🇷🇺 Ruso",
+        "ru-ru": "🇷🇺 Ruso",
+        "rus": "🇷🇺 Ruso"
+    };
+
+    return (
+        languages[value] ||
+        `🌐 ${language || "Desconocido"}`
+    );
+}
+
+// ==========================================================
+// DETECTAR EMBED69
+// ==========================================================
+
+function isEmbed69(
+    url
+) {
+
+    try {
+
+        return new URL(
+            url
+        )
+            .hostname
+            .toLowerCase()
+            .includes(
+                "embed69.org"
+            );
+
+    } catch {
+
+        return false;
+    }
+}
+
+
+// ==========================================================
+// DETECTAR XUPALACE
+// ==========================================================
+
+function isPelisSeriesHoy(
+    url
+) {
+
+    try {
+
+        return new URL(
+            url
+        )
+            .hostname
+            .toLowerCase()
+            .includes(
+                "player.pelisserieshoy.com"
+            );
+
+    } catch {
+
+        return false;
+    }
+}
+
+function isXupalaсe(
+    url
+) {
+
+    try {
+
+        return new URL(
+            url
+        )
+            .hostname
+            .toLowerCase()
+            .includes(
+                "xupalace.org"
+            );
+
+    } catch {
+
+        return false;
+    }
+}
+
+
+// ==========================================================
+// DEDUPLICAR STREAMS
+// ==========================================================
+
+function deduplicateStreams(
+    streams
+) {
+
+    const seen =
+        new Set();
+
+    return streams.filter(
+        stream => {
+
+            if (
+                !stream?.url
+            ) {
+
+                return false;
+            }
+
+            if (
+                seen.has(
+                    stream.url
+                )
+            ) {
+
+                return false;
+            }
+
+            seen.add(
+                stream.url
+            );
+
+            return true;
+        }
+    );
+}
+
+
+
+
+
+
+

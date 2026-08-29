@@ -1,0 +1,581 @@
+﻿import {
+    fetchText,
+    HEADERS
+} from "../http.js";
+
+import {
+    parseHlsPlaylist
+} from "../hls.js";
+
+
+// ==========================================================
+// VIDHIDE RESOLVER
+// ==========================================================
+
+export async function resolveVidhide(
+    url
+) {
+
+    if (
+        !url ||
+        typeof url !== "string"
+    ) {
+
+        throw new Error(
+            "Vidhide: URL inválida"
+        );
+    }
+
+    console.log(
+        "[Vidhide] Opening:",
+        url
+    );
+
+    // ======================================================
+    // 1. Obtener página
+    // ======================================================
+
+    const html =
+        await fetchText(
+            url
+        );
+
+    // ======================================================
+    // 2. Desempaquetar JavaScript
+    // ======================================================
+
+    const unpacked =
+        unpackPacker(
+            html
+        );
+
+    // ======================================================
+    // 3. Buscar fuentes HLS
+    // ======================================================
+
+    const sources =
+        extractSources(
+            unpacked,
+            url
+        );
+
+    if (
+        sources.length === 0
+    ) {
+
+        throw new Error(
+            "Vidhide: no se encontraron fuentes HLS"
+        );
+    }
+
+    console.log(
+        "[Vidhide] Sources:",
+        sources.length
+    );
+
+    const streams = [];
+
+    // ======================================================
+    // 4. Procesar fuentes
+    // ======================================================
+
+    for (
+        const source of
+        sources
+    ) {
+
+        try {
+
+            console.log(
+                "[Vidhide] Master:",
+                source.url
+            );
+
+            const controller =
+    new AbortController();
+
+const timeout =
+    setTimeout(
+        () => controller.abort(),
+        10000
+    );
+
+let response;
+
+try {
+
+    response =
+        await fetch(
+            source.url,
+            {
+                headers: {
+                    ...HEADERS,
+
+                    Referer:
+                        url,
+
+                    Origin:
+                        new URL(
+                            url
+                        ).origin
+                },
+
+                signal:
+                    controller.signal
+            }
+        );
+
+} finally {
+
+    clearTimeout(
+        timeout
+    );
+}
+
+            console.log(
+                "[Vidhide] HTTP:",
+                response.status
+            );
+
+            if (
+                !response.ok
+            ) {
+
+                throw new Error(
+                    `HTTP ${response.status}`
+                );
+            }
+
+            const playlist =
+                await response.text();
+
+            console.log(
+                "[Vidhide] Playlist:",
+                playlist.length
+            );
+
+            console.log(
+                "[Vidhide] HLS:",
+                playlist
+                    .trimStart()
+                    .startsWith(
+                        "#EXTM3U"
+                    )
+            );
+
+            // ==================================================
+            // Playlist → variantes
+            // ==================================================
+
+            const variants =
+                parseHlsPlaylist(
+                    playlist,
+                    source.url
+                );
+
+            console.log(
+                "[Vidhide] Variants:",
+                variants.length
+            );
+
+            if (
+                variants.length > 0
+            ) {
+
+                streams.push(
+                    ...variants
+                );
+
+                continue;
+            }
+
+            // --------------------------------------------------
+            // Si el playlist es directamente reproducible
+            // pero no tiene variantes.
+            // --------------------------------------------------
+
+            streams.push({
+
+                url:
+                    source.url,
+
+                quality:
+                    source.quality ||
+                    "auto"
+            });
+
+        } catch (
+            error
+        ) {
+
+            console.warn(
+                "[Vidhide] Error:",
+                error.message
+            );
+
+            // --------------------------------------------------
+            // Fallback al master
+            // --------------------------------------------------
+
+            streams.push({
+
+                url:
+                    source.url,
+
+                quality:
+                    source.quality ||
+                    "auto"
+            });
+        }
+    }
+
+    const result =
+        deduplicateStreams(
+            streams
+        );
+
+    console.log(
+        "[Vidhide] Returning:",
+        result.length
+    );
+
+    return result;
+}
+
+
+// ==========================================================
+// EXTRAER FUENTES HLS
+// ==========================================================
+
+function extractSources(
+    source,
+    pageUrl
+) {
+
+    const sources = [];
+
+    const matches =
+        source.matchAll(
+            /["'](hls4|hls3|hls2)["']\s*:\s*["']([^"']+)["']/gi
+        );
+
+    for (
+        const match of
+        matches
+    ) {
+
+        const type =
+            match[1]
+                .toLowerCase();
+
+        let value =
+            match[2];
+
+        value =
+            value
+                .replace(
+                    /\\\//g,
+                    "/"
+                )
+                .replace(
+                    /\\u002f/gi,
+                    "/"
+                )
+                .replace(
+                    /\\u003a/gi,
+                    ":"
+                )
+                .replace(
+                    /&amp;/gi,
+                    "&"
+                );
+
+        let absoluteUrl;
+
+        try {
+
+            absoluteUrl =
+                new URL(
+                    value,
+                    pageUrl
+                ).href;
+
+        } catch {
+
+            continue;
+        }
+
+        if (
+            !absoluteUrl.includes(
+                ".m3u8"
+            )
+        ) {
+
+            continue;
+        }
+
+        sources.push({
+
+            url:
+                absoluteUrl,
+
+            quality:
+                "auto",
+
+            priority:
+                Number(
+                    type.slice(
+                        -1
+                    )
+                )
+        });
+    }
+
+    // ------------------------------------------------------
+    // El resolver anterior usaba la fuente de mayor
+    // prioridad disponible.
+    // ------------------------------------------------------
+
+    return deduplicateSources(
+        sources
+    )
+        .sort(
+            (
+                a,
+                b
+            ) =>
+                b.priority -
+                a.priority
+        )
+        .slice(
+            0,
+            1
+        );
+}
+
+
+// ==========================================================
+// PACKER
+// ==========================================================
+
+function unpackPacker(
+    html
+) {
+
+    const match =
+        html.match(
+            /eval\(function\(p,a,c,k,e,d\)\{[\s\S]*?\}\('((?:\\.|[^'])*)',(\d+),(\d+),'((?:\\.|[^'])*)'\.split\('\|'\)\)\)/
+        );
+
+    if (
+        !match
+    ) {
+
+        return html;
+    }
+
+    let source =
+        decodePackedString(
+            match[1]
+        );
+
+    const base =
+        Number(
+            match[2]
+        );
+
+    const count =
+        Number(
+            match[3]
+        );
+
+    const dictionary =
+        decodePackedString(
+            match[4]
+        ).split(
+            "|"
+        );
+
+    for (
+        let index =
+            count - 1;
+        index >= 0;
+        index--
+    ) {
+
+        const replacement =
+            dictionary[
+                index
+            ];
+
+        if (
+            !replacement
+        ) {
+
+            continue;
+        }
+
+        const token =
+            index.toString(
+                base
+            );
+
+        source =
+            source.replace(
+                new RegExp(
+                    `\\b${token}\\b`,
+                    "g"
+                ),
+                replacement
+            );
+    }
+
+    return source;
+}
+
+
+// ==========================================================
+// DECODE PACKED STRING
+// ==========================================================
+
+function decodePackedString(
+    value
+) {
+
+    return String(
+        value || ""
+    ).replace(
+        /\\(x[\da-fA-F]{2}|u[\da-fA-F]{4}|.)/g,
+        (
+            match,
+            escape
+        ) => {
+
+            if (
+                escape.startsWith(
+                    "x"
+                )
+            ) {
+
+                return String.fromCharCode(
+                    Number.parseInt(
+                        escape.slice(1),
+                        16
+                    )
+                );
+            }
+
+            if (
+                escape.startsWith(
+                    "u"
+                )
+            ) {
+
+                return String.fromCharCode(
+                    Number.parseInt(
+                        escape.slice(1),
+                        16
+                    )
+                );
+            }
+
+            const escapes = {
+
+                b: "\b",
+                f: "\f",
+                n: "\n",
+                r: "\r",
+                t: "\t",
+                v: "\v"
+            };
+
+            return (
+                escapes[
+                    escape
+                ] ??
+                escape
+            );
+        }
+    );
+}
+
+
+// ==========================================================
+// DEDUPLICAR SOURCES
+// ==========================================================
+
+function deduplicateSources(
+    sources
+) {
+
+    const seen =
+        new Set();
+
+    return sources.filter(
+        source => {
+
+            if (
+                !source?.url
+            ) {
+
+                return false;
+            }
+
+            if (
+                seen.has(
+                    source.url
+                )
+            ) {
+
+                return false;
+            }
+
+            seen.add(
+                source.url
+            );
+
+            return true;
+        }
+    );
+}
+
+
+// ==========================================================
+// DEDUPLICAR STREAMS
+// ==========================================================
+
+function deduplicateStreams(
+    streams
+) {
+
+    const seen =
+        new Set();
+
+    return streams.filter(
+        stream => {
+
+            if (
+                !stream?.url
+            ) {
+
+                return false;
+            }
+
+            if (
+                seen.has(
+                    stream.url
+                )
+            ) {
+
+                return false;
+            }
+
+            seen.add(
+                stream.url
+            );
+
+            return true;
+        }
+    );
+}
+
