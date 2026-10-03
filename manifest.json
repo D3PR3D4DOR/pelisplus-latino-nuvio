@@ -78,18 +78,18 @@
       "supportsExternalPlayer": true
     },
     {
-      "id": "sololatino",
-      "name": "SoloLatino",
-      "description": "Películas y series desde SoloLatino.",
+      "id": "cuevanapro",
+      "name": "CuevanaPRO",
+      "description": "Películas y series desde cuevanapro.",
       "version": "1.0.0",
       "author": "D3PR3D4D0R",
       "supportedTypes": [
         "movie",
         "tv"
       ],
-      "filename": "providers/sololatino.js",
+      "filename": "providers/cuevanapro.js",
       "enabled": true,
-      "logo": "https://sololatino.net/images/logo.png",
+      "logo": "https://cuevanapro.org/themes/cuevana/assets/img/faviconen.png",
       "contentLanguage": [
         "es",
         "lat"
